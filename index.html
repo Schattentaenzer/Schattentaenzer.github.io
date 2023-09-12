@@ -1,0 +1,1056 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8"/>
+        <meta name="description" content="Teaching and learning module"/>
+        <meta name="keywords" content="line of balance"/>
+        <meta name="author" content="Dr Xiaojun Chen"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        <title>Critical Path</title>
+        <link rel="shortcut icon" href="http://www.lindenbaum.net.au/unsw/util/favicon.ico" type="image/vnd.microsoft.icon"/>
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+        <link href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.0/themes/smoothness/jquery-ui.css"/>
+        <script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.0/jquery-ui.min.js"></script>
+        <script src="https://use.fontawesome.com/582f5b6b01.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/4.10.2/d3.min.js"></script>
+        <style>
+            body {
+                font-size: 16px;
+                font-family: Arial, Helvetica, sans-serif;
+                margin-left: 10px;
+                margin-right: 10px;
+                padding: 0px;
+                border-width: 0px; 
+                background-color: white;
+            }
+
+            .accordion {
+                margin: 0;
+            }
+
+            .accordion .ui-accordion-header {
+                font-size: 20px;
+                font-weight: bold;
+            }
+
+            .accordion .ui-accordion-content {
+                background-color: transparent;
+                border: 0;
+            }
+
+            img {
+                margin-left: 30px;
+                margin-bottom: 40px;
+                display: block;
+            }
+
+            #answer {
+                display: none;
+            }
+
+            table.table-bordered{
+                border: 1px solid black;
+            }
+
+            table.table-bordered > thead > tr > th{
+                border:1px solid black;
+                text-align: center;
+            }
+
+            table.table-bordered > tbody > tr > td{
+                border:1px solid black;
+                text-align: center;
+            }
+
+            .label {
+                font-size: 20px;
+            }
+
+            .clickable:hover {
+                cursor: pointer;
+            }
+
+            .ui-dialog .ui-dialog-titlebar {
+                border: 1px;
+                color: #DAA520;
+                background: #483D8B;
+                font-size: 18px;
+            }
+
+            .ui-dialog .ui-dialog-content {
+                border: 0;
+                padding-top: 20px;
+                font-size: 18px;
+                color: #483D8B;
+                background-color: #FDF8E4;
+                overflow: auto;
+            }
+
+            .ui-dialog .ui-dialog-buttonpane {
+                text-align: left;
+                border-width: 1px 0 0 0;
+                background-image: none;
+                margin-top: .5em;
+                padding: .3em 1em .5em .4em;
+                background-color: #483D8B;
+            }
+
+            input {
+                background: #FAFAD2;
+                border-radius: 5px;
+                margin-right: 1em;
+                box-sizing: border-box;
+            }
+
+            input:disabled {
+                background: #B0C4DE;
+            }
+
+            input::-webkit-input-placeholder { /* Chrome/Opera/Safari */
+                color: #B0C4DE;
+                font-size: 12px;
+            }
+
+            input::-moz-placeholder { /* Firefox 19+ */
+                color: #B0C4DE;
+                font-size: 12px;
+            }
+
+            input:-ms-input-placeholder { /* IE 10+ */
+                color: #B0C4DE;
+                font-size: 12px;
+            }
+
+            input:-moz-placeholder { /* Firefox 18- */
+                color: #B0C4DE;
+                font-size: 12px;
+            }
+
+            #svg-container {
+                max-width: 800px;
+                max-height: 600px;
+                margin: auto;
+            }
+        </style>
+        <script type="text/javascript">
+            /*
+            SVG name convention:
+
+            #b-A: rect for activity A
+            #t1-A: text of est, eft for activity A
+            #t2-A: text of lst, lft for activity A
+            #tf-A: text of tf for activity A
+            #ff-A: text of ff for activity A
+            #label-A: activity label for activity A
+
+            #path-AB: arrow from A to B
+
+            .label: svg text tag which need to be shown all the time
+            .clickable: specify mouse pointer on hover
+            */
+
+            Array.prototype.removeElement = function(ele) {
+                return this.filter(function(e, i, a) {
+                    if (e === ele) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+                });
+            }
+
+            function toStart(e) {
+                $("#answer").css("display", "block");
+                $("<p>Step 1: Calculate early start time and early finish time for each activity forwardly. Click the activity box in golden color, and a dialog will pop up. Follow the instruction on the dialog.</p>")
+                    .css("color", "red").appendTo($("#answer"));
+                $(e.target).hide();
+                $(".label").addClass("clickable").on("click", svg_click);
+                $("svg rect").addClass("clickable").on("click", svg_click);
+                $(".static").removeClass("clickable").off("click");
+                model.current.forEach(function(ele, idx, arr) {
+                    $("#b-" + ele).attr("fill", "#FAFAD2");
+                });
+            }
+
+            function svg_click(e) {
+                var activity = $(e.target).attr("id").slice(-1);
+                handle_activity(activity);
+            }
+
+            function handle_activity(act) {
+                if (!model.current.includes(act)) {
+                    $("#warning").dialog({
+                        resizable: false,
+                        height: "auto",
+                        width: "auto",
+                        modal: true,
+                        buttons: {
+                            OK: function() {
+                                $(this).dialog("close");
+                            }
+                        }
+                    });
+                } else {
+                    prepareDialog(act);
+                    $("#dialog").dialog({
+                        resizable: false,
+                        height: "auto",
+                        width: "auto",
+                        modal: true,
+                        close: function() {
+                            $("#dialog input").val("");
+                            $("#feedback").html("&nbsp;");
+                        },
+                        buttons: {
+                            OK: function() {
+                                check_dialog(act);
+                            },
+                            Cancel: function() {
+                                $(this).dialog("close");
+                            }
+                        }
+                    });
+                }
+            }
+
+            function prepareDialog(act) {  
+                var lbltext = $("#label-" + act).html();
+                $("#lbl").html(lbltext);
+            }
+
+            function check_dialog(act) {
+                if (model.state == "early") {
+                    var est = parseInt($("#est").val());
+                    var eft = parseInt($("#eft").val());
+                    if (model.prob[act].chechEarly(est, eft)) {
+                        $("#t1-" + act).attr("opacity", "1").html(model.prob[act].est.toString() + " - " + model.prob[act].eft.toString());
+                        
+                        model.current = model.current.removeElement(act);
+                        
+                        model.prob[act].post.forEach(function(ele, idx, arr) {
+                            var available = true;
+                            model.prob[ele].pre.forEach(function(el, i, a) {
+                                if ($("#t1-" + el).attr("opacity") == "0") {
+                                    available = false
+                                }
+                            });
+                            if (available) {
+                                model.current.push(ele);
+                            }
+                        });
+                        
+                        if (model.current.length == 0) {
+                            model.state = "late";
+                            $(".early").prop("disabled", true);
+                            $(".late").prop("disabled", false);
+                            
+                            $("#answer p").css("color", "black");
+                            $("<p>Step 2: Calculate late start time and late finish time for each activity backwardly.</p>")
+                                .css("color", "red").appendTo($("#answer"));
+                            
+                            model.current.push("j");
+                        }
+                        
+                        $("rect").attr("fill", "white");
+                        $("rect .static").attr("fill", "skyblue");
+                        model.current.forEach(function(ele, idx, arr) {
+                            $("#b-" + ele).attr("fill", "#FAFAD2");
+                        });
+                        
+                        $("#dialog").dialog("close");
+                    } else {
+                        $("#feedback").html("Incorrect!");
+                    }
+                } else if (model.state == "late") {
+                    var lst = parseInt($("#lst").val());
+                    var lft = parseInt($("#lft").val());
+                    if (model.prob[act].chechLate(lst, lft)) {
+                        $("#t2-" + act).attr("opacity", "1").html(model.prob[act].lst.toString() + " - " + model.prob[act].lft.toString());
+                        
+                        model.current = model.current.removeElement(act);
+                        
+                        model.prob[act].pre.forEach(function(ele, idx, arr) {
+                            var available = true;
+                            model.prob[ele].post.forEach(function(el, i, a) {
+                                if ($("#t2-" + el).attr("opacity") == "0") {
+                                    available = false
+                                }
+                            });
+                            if (available) {
+                                model.current.push(ele);
+                            }
+                        });
+                        
+                        if (model.current.length == 0) {
+                            model.state = "final";
+                            $(".late").prop("disabled", true);
+                            $(".final").prop("disabled", false);
+                            
+                            $("#answer p").css("color", "black");
+                            $("<p>Step 3: Now you can calculate the free float and total float. Meanwhile:<br/><br/>Please find the critial path (answer in the sequence of activity name, i.e. ADHJ, uppercase only, press ENTER after input):<br/><textarea rows='1' cols='10' style='resize: none; overflow: hidden; color: black;' onkeypress='check_critical(event);'></textarea><br/>After you answer all floats and the critical path, this question is completed.</p>").css("color", "red").appendTo($("#answer"));
+                            
+                            model.current = ["a", "b", "c", "d", "e", "f", "g", "h", "j"];
+                        }
+                        
+                        $("rect").attr("fill", "white");
+                        $("rect .static").attr("fill", "skyblue");
+                        model.current.forEach(function(ele, idx, arr) {
+                            $("#b-" + ele).attr("fill", "#FAFAD2");
+                        });
+                        
+                        $("#dialog").dialog("close");
+                    } else {
+                        $("#feedback").html("Incorrect!");
+                    }
+                } else if (model.state == "final") {
+                    var ff = parseInt($("#ff").val());
+                    var tf = parseInt($("#tf").val());
+                    if (model.prob[act].chechFloat(ff, tf)) {
+                        $("#ff-" + act).attr("opacity", "1").html(model.prob[act].ff.toString());
+                        $("#tf-" + act).attr("opacity", "1").html(model.prob[act].tf.toString());
+                        
+                        model.current = model.current.removeElement(act);
+                        
+                        $("rect").attr("fill", "white");
+                        $("rect .static").attr("fill", "skyblue");
+                        model.current.forEach(function(ele, idx, arr) {
+                            $("#b-" + ele).attr("fill", "#FAFAD2");
+                        });
+                        
+                        if (model.current.length == 0) {
+                            check_final();
+                        }
+                        
+                        $("#dialog").dialog("close");
+                    } else {
+                        $("#feedback").html("Incorrect!");
+                    }
+                }
+            }
+
+            function check_critical(e) {
+                if (e.keyCode == 13) {
+                    var in1 = $(e.target).val().replace(/\s/g, "").toUpperCase();
+                    var isTure = (in1 == "BFEHJ");
+                    if (isTure) {
+                        $(e.target).css("background-color", "white").prop("disabled", true).css("background", "#d3d3d3")
+                                .after("<span>&nbsp;</span><span class='glyphicon glyphicon-ok' style='color: blue;'></span><span> Critical path in the figure is shown in red</span>");
+                        $(".critical").attr("stroke", "red");
+                        if (model.current.length == 0) {
+                            check_final();
+                        }
+                    } else {
+                        $(e.target).after("<span>&nbsp;</span><span class='glyphicon glyphicon-remove' style='color: red;'></span>");
+                    }
+                } 
+            }
+
+            function check_final() {
+                if ($("textarea").prop("disabled")) {
+                    $(".clickable").off("click");
+                    $("#answer p").css("color", "black");
+                    $("<p>Congratulations! This question is completed.</p>").css("font-weight", "bold").appendTo($("#answer"));
+                    startFirework();
+                }
+            }
+
+            $(document).ready(function() {
+                $(".accordion").accordion({
+                    collapsible: true,
+                    heightStyle: "content"
+                });
+                
+                draw_path();
+                draw_arrows();
+                
+                model.prob.a.drawRect(150, 100);
+                model.prob.b.drawRect(150, 250);
+                model.prob.c.drawRect(150, 450);
+                model.prob.d.drawRect(400, 100);
+                model.prob.e.drawRect(400, 250);
+                model.prob.f.drawRect(270, 350);
+                model.prob.g.drawRect(400, 450);
+                model.prob.h.drawRect(600, 250);
+                model.prob.j.drawRect(600, 450);
+                
+                for (var key in model.prob) {
+                    model.prob[key].drawLabel();
+                    model.prob[key].drawText();
+                }
+                
+                draw_others();
+                
+                $("svg text").attr("opacity", "0");
+                $(".label").attr("opacity", "1");
+                
+                $("canvas").on("click", function(e) {
+                    $("canvas").hide(); 
+                    e.stopPropagation();
+                });
+            });
+
+            function draw_path() {
+                d3.select("#svg-main")
+                .append("path")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-dasharray", "5, 10")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 60 250 L 60 125 150 125 M 60 300 L 60 475 150 475");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-dasharray", "5, 10")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 110 275 L 150 275");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-dasharray", "5, 10")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 650 500 L 650 580");
+            }
+
+            function draw_arrows() {
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-bf")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 200 300 l 0 75 70 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-fe")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 370 375 l 80 0 0 -75 -5 20 5 -20 5 20 -5 -20");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-eh")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 500 275 l 100 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-hj")
+                .attr("class", "critical")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 700 275 l 50 0 0 200 -50 0 20 -5 -20 5 20 5 -20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-ad")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 250 125 l 150 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-be")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 250 275 l 150 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-cg")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 250 475 l 150 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-dh")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 500 125 l 50 0 0 135 50 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-fj")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 370 385 l 180 0 0 75 50 0 -20 -5 20 5 -20 5 20 -5");
+                
+                d3.select("#svg-main")
+                .append("path")
+                .attr("id", "path-gj")
+                .attr("stroke", "blue")
+                .attr("fill", "none")
+                .attr("stroke-width", "5")
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("d", "M 500 475 l 100 0 -20 -5 20 5 -20 5 20 -5");
+            }
+
+            function draw_others() {
+                d3.select("#svg-main")
+                .append("rect")
+                .attr("x", 10)
+                .attr("y", 250)
+                .attr("rx", 15)
+                .attr("ry", 15)
+                .attr("width", 100)
+                .attr("height", 50)
+                .attr("stroke-width", 5)
+                .attr("fill", "skyblue")
+                .attr("class", "static")
+                .attr("stroke", "red");
+                
+                d3.select("#svg-main")
+                .append("rect")
+                .attr("x", 600)
+                .attr("y", 540)
+                .attr("rx", 15)
+                .attr("ry", 15)
+                .attr("width", 100)
+                .attr("height", 50)
+                .attr("stroke-width", 5)
+                .attr("fill", "skyblue")
+                .attr("class", "static")
+                .attr("stroke", "red");
+                
+                d3.select("#svg-main")
+                .append("text")
+                .attr("x", 20)
+                .attr("y", 290)
+                .attr("stroke-width", 0)
+                .attr("fill", "black")
+                .attr("stroke", "white")
+                .attr("font-family", "Sans-serif")
+                .style("font-size", "24px")
+                .attr("class", "label static")
+                .text("START");
+                
+                d3.select("#svg-main")
+                .append("text")
+                .attr("x", 625)
+                .attr("y", 580)
+                .attr("stroke-width", 0)
+                .attr("fill", "black")
+                .attr("stroke", "white")
+                .attr("font-family", "Sans-serif")
+                .style("font-size", "24px")
+                .attr("class", "label static")
+                .text("END");    
+            }
+
+            function Node(label, est, eft, lst, lft, ff, pre, post, duration) {
+                this.label = label;
+                this.est = est;
+                this.eft = eft;
+                this.lst = lst;
+                this.lft = lft;
+                this.tf = this.lst - this.est;
+                this.ff = ff;
+                this.pre = pre;
+                this.post = post;
+                this.duration = duration;
+                
+                this.chechEarly = function(s, f) {
+                    if ((this.est == s) && (this.eft == f)) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                
+                this.chechLate = function(s, f) {
+                    if ((this.lst == s)  && (this.lft == f)) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                
+                this.chechFloat = function(s, f) {
+                    if ((this.ff == s)  && (this.tf == f)) {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                
+                this.drawRect = function(x, y) {
+                    this.location = [x, y];
+                    d3.select("#svg-main")
+                    .append("rect")
+                    .attr("id", "b-" + this.label)
+                    .attr("x", x)
+                    .attr("y", y)
+                    .attr("width", 100)
+                    .attr("height", 50)
+                    .attr("stroke-width", 5)
+                    .attr("fill", "white")
+                    .attr("stroke", "black");
+                }
+                
+                this.drawLabel = function() {
+                    d3.select("#svg-main")
+                    .append("text")
+                    .attr("id", "label-" + this.label)
+                    .attr("x", this.location[0] + 20)
+                    .attr("y", this.location[1] + 40)
+                    .attr("stroke-width", 0)
+                    .attr("fill", "black")
+                    .attr("stroke", "black")
+                    .attr("font-family", "Sans-serif")
+                    .style("font-size", "30px")
+                    .attr("class", "label")
+                    .text(this.label.toUpperCase() + " , " + this.duration);
+                }
+                
+                this.drawText = function() {
+                    d3.select("#svg-main")
+                    .append("text")
+                    .attr("id", "t1-" + this.label)
+                    .attr("x", this.location[0] + 35)
+                    .attr("y", this.location[1] - 30)
+                    .attr("stroke-width", 0)
+                    .attr("fill", "black")
+                    .attr("stroke", "black")
+                    .attr("font-family", "Sans-serif")
+                    .attr("font-weight", "bold")
+                    .style("font-size", "16px")
+                    .style("fill", "red")
+                    .text(this.est + " - " + this.eft);
+                    
+                    d3.select("#svg-main")
+                    .append("text")
+                    .attr("id", "t2-" + this.label)
+                    .attr("x", this.location[0] + 35)
+                    .attr("y", this.location[1] - 10)
+                    .attr("stroke-width", 0)
+                    .attr("fill", "black")
+                    .attr("stroke", "black")
+                    .attr("font-family", "Sans-serif")
+                    .attr("font-weight", "bold")
+                    .style("font-size", "16px")
+                    .style("fill", "red")
+                    .text(this.lst + " - " + this.lft);
+                    
+                    d3.select("#svg-main")
+                    .append("text")
+                    .attr("id", "ff-" + this.label)
+                    .attr("x", this.location[0] + 15)
+                    .attr("y", this.location[1] - 20)
+                    .attr("stroke-width", 0)
+                    .attr("fill", "black")
+                    .attr("stroke", "black")
+                    .attr("font-family", "Sans-serif")
+                    .attr("font-weight", "bold")
+                    .style("font-size", "16px")
+                    .style("fill", "red")
+                    .text(this.ff);
+                    
+                    d3.select("#svg-main")
+                    .append("text")
+                    .attr("id", "tf-" + this.label)
+                    .attr("x", this.location[0] + 90)
+                    .attr("y", this.location[1] - 20)
+                    .attr("stroke-width", 0)
+                    .attr("fill", "black")
+                    .attr("stroke", "black")
+                    .attr("font-family", "Sans-serif")
+                    .attr("font-weight", "bold")
+                    .style("font-size", "16px")
+                    .style("fill", "red")
+                    .text(this.tf);
+                }
+            }
+
+            var activity_list = (function() {
+                var lst = {};
+                
+                lst.a = new Node("a", 0, 7, 9, 16, 0, [], ["d"], 7);
+                lst.b = new Node("b", 0, 8, 0, 8, 0, [], ["e", "f"], 8);
+                lst.c = new Node("c", 0, 6, 19, 25, 0, [], ["g"], 6);
+                lst.d = new Node("d", 7, 13, 16, 22, 9, ["a"], ["h"], 6);
+                lst.e = new Node("e", 16, 22, 16, 22, 0, ["b", "f"], ["h"], 6);
+                lst.f = new Node("f", 8, 16, 8, 16, 0, ["b"], ["e", "j"], 8);
+                lst.g = new Node("g", 6, 10, 25, 29, 19, ["c"], ["j"], 4);
+                lst.h = new Node("h", 22, 29, 22, 29, 0, ["d", "e"], ["j"], 7);
+                lst.j = new Node("j", 29, 32, 29, 32, 0, ["f", "g", "h"], [], 3);
+                
+                return lst;
+            })();
+
+            var model = {
+                state: "early",
+                current: ["a", "b", "c"],
+                prob: activity_list
+            }
+
+            function startFirework() {
+                prepareFirework();
+                
+                setTimeout(function() {
+                    $("canvas").hide();
+                }, 5000);
+            }
+
+            function prepareFirework() {
+                $("canvas").attr("width", window.innerWidth.toString()).attr("height", window.innerHeight.toString()).css("display", "block");
+                
+                var controller = new Controller();
+                
+                controller.init();
+                requestAnimationFrame(controller.animation);
+            };
+
+            var screenWidth = window.innerWidth;
+            var screenHeight = window.innerHeight;
+            
+            var minVx = -10;
+            var deltaVx = 20;
+            var minVy = 25
+            var deltaVy = 15;
+            var minParticleV = 5;
+            var deltaParticleV = 5;
+            
+            var gravity = 1;
+            
+            var explosionRadius = 200;
+            var bombRadius = 10;
+            var explodingDuration = 100;
+            var explosionDividerFactor = 10; // I couldn't find a better name. Got any?
+            
+            var nBombs = 1; // initial
+            var percentChanceNewBomb = 5;
+            
+            function Color(min) {
+                min = min || 0;
+                this.r = colorValue(min);
+                this.g = colorValue(min);
+                this.b = colorValue(min);
+                this.style = createColorStyle(this.r, this.g, this.b);
+            };
+
+            function colorValue(min) {
+                return Math.floor(Math.random() * 255 + min);
+            }
+
+            function createColorStyle(r,g,b) {
+                return 'rgba(' + r + ',' + g + ',' + b + ', 0.8)';
+            }
+
+            // A Bomb. Or firework.
+            function Bomb() {
+                var self = this;
+
+                self.radius = bombRadius;
+                self.previousRadius = bombRadius;
+                self.explodingDuration = explodingDuration;
+                self.hasExploded = false;
+                self.alive = true;
+                self.color = new Color();
+
+                self.px = (window.innerWidth / 4) + (Math.random() * window.innerWidth / 2);
+                self.py = window.innerHeight;
+
+                self.vx = minVx + Math.random() * deltaVx;
+                self.vy = (minVy + Math.random() * deltaVy) * -1; // because y grows downwards
+
+                self.duration;
+
+                self.update = function(particlesVector) {
+                    
+                    if (self.hasExploded) {
+                        var deltaRadius = explosionRadius - self.radius;
+                        self.previousRadius = self.radius;
+                        self.radius += deltaRadius / explosionDividerFactor;
+                        
+                        self.explodingDuration--;
+                        
+                        if(self.explodingDuration == 0) {
+                            self.alive = false;
+                        }
+                    } else {
+                        self.vx += 0;
+                        self.vy += gravity;
+                        
+                        if(self.vy >= 0) { // invertion point
+                            self.explode(particlesVector);
+                        }
+
+                        self.px += self.vx;
+                        self.py += self.vy;
+                    }
+                };
+
+                self.draw = function(ctx) {
+                    ctx.beginPath();
+                    ctx.arc(self.px, self.py, self.previousRadius, 0, Math.PI * 2, false);
+                    
+                    if (self.hasExploded) {
+                        
+                    } else {
+                        ctx.fillStyle = self.color.style;
+                        ctx.lineWidth = 1;
+                        ctx.fill();
+                    }
+                };
+
+                self.explode = function(particlesVector) {
+                    self.hasExploded = true;
+                    var e = 3 + Math.floor(Math.random() * 3);
+                    for(var j = 0; j < e; j++) {
+                        var n = 10 + Math.floor(Math.random() * 21); // 10 - 30
+                        var speed = minParticleV + Math.random() * deltaParticleV;
+                        var deltaAngle = 2 * Math.PI / n;
+                        var initialAngle = Math.random() * deltaAngle;
+                        for(var i = 0; i < n; i++) {
+                            particlesVector.push(new Particle(self,  i * deltaAngle + initialAngle, speed));
+                        }
+                    }
+                };
+            }
+
+            function Particle(parent, angle, speed) {
+                var self = this;
+                self.px = parent.px;
+                self.py = parent.py;
+                self.vx = Math.cos(angle) * speed;
+                self.vy = Math.sin(angle) * speed;
+                self.color = parent.color;
+                self.duration = 40 + Math.floor(Math.random()*20);
+                self.alive = true;
+
+                self.update = function() {
+                    self.vx += 0;
+                    self.vy += gravity / 10;
+
+                    self.px += self.vx;
+                    self.py += self.vy;
+                    self.radius = 3;
+
+                    self.duration--;
+                    
+                    if (self.duration <= 0) {
+                        self.alive = false;
+                    }
+                };
+
+                self.draw = function(ctx) {
+                    ctx.beginPath();
+                    ctx.arc(self.px, self.py, self.radius, 0, Math.PI * 2, false);
+                    ctx.fillStyle = self.color.style;
+                    ctx.lineWidth = 1;
+                    ctx.fill();
+                };
+            }
+
+            function Controller() {
+                var self = this;
+                
+                self.canvas = document.getElementById("mycanvas");
+                self.ctx = self.canvas.getContext('2d');
+
+                function setSpeedParams() {
+                    var heightReached = 0;
+                    var vy = 0;
+
+                    while (heightReached < screenHeight && vy <= 0) {
+                        vy += gravity;
+                        heightReached += vy;
+                    }
+
+                    minVy = vy / 2;
+                    deltaVy = vy - minVy;
+
+                    vx = (1 / 4) * screenWidth / (vy / 2);
+                    minVx = -vx;
+                    deltaVx = 2 * vx;
+                };
+
+                self.init = function() {
+                    self.readyBombs = [];
+                    self.explodedBombs = [];
+                    self.particles = [];
+
+                    for (var i = 0; i < nBombs; i++) { 
+                        self.readyBombs.push(new Bomb());
+                    } 
+                } 
+                
+                self.update = function() { 
+                    var aliveBombs = []; 
+                    while(self.explodedBombs.length > 0) {
+                        var bomb = self.explodedBombs.shift();
+                        bomb.update();
+                        
+                        if (bomb.alive) {
+                            aliveBombs.push(bomb);
+                        }
+                    }
+                    self.explodedBombs = aliveBombs;
+
+                    var notExplodedBombs = [];
+                    while(self.readyBombs.length > 0) {
+                        var bomb = self.readyBombs.shift();
+                        bomb.update(self.particles);
+                        if(bomb.hasExploded) {
+                            self.explodedBombs.push(bomb);
+                        } else {
+                            notExplodedBombs.push(bomb);
+                        }
+                    }
+                    self.readyBombs = notExplodedBombs;
+
+                    var aliveParticles = [];
+                    while(self.particles.length > 0) {
+                        var particle = self.particles.shift();
+                        particle.update();
+                        
+                        if (particle.alive) {
+                            aliveParticles.push(particle);
+                        }
+                    }
+                    self.particles = aliveParticles;
+                }
+
+                self.draw = function()  {
+                    self.ctx.beginPath();
+                    self.ctx.fillStyle='rgba(224, 255, 255, 0.05)'; // Ghostly effect
+                    self.ctx.fillRect(0, 0, self.canvas.width, self.canvas.height);
+
+
+                    for (var i = 0; i < self.readyBombs.length; i++) {
+                        self.readyBombs[i].draw(self.ctx);
+                    }
+
+                    for (var i = 0; i < self.explodedBombs.length; i++) {
+                        self.explodedBombs[i].draw(self.ctx);
+                    }
+
+                    for (var i = 0; i < self.particles.length; i++) {
+                        self.particles[i].draw(self.ctx);
+                    }
+                }
+
+                self.animation = function() {
+                    self.update();
+                    self.draw();
+
+                    if (Math.random() * 100 < percentChanceNewBomb) {
+                        self.readyBombs.push(new Bomb());
+                    }
+
+                    requestAnimationFrame(self.animation);
+                }
+            }
+        </script>
+    </head>
+    <body>
+        <div id="dialog" title="Answer Dialog" style="display: none;">
+            <div style="color: black; font-weight: bold;">
+                <p>Instrustion:</p>
+                <ul style="font-size: 14px; width: 500px;">
+                    <li>The activity name and duration are shown in the middle</li>
+                    <li>Fill in the input boxes which are in golden color</li>
+                    <li>Press OK button after your answered</li>
+                    <li>You can move this dialog by dragging its title bar</li>
+                </ul>
+            </div>
+            <table>
+                <tr>
+                    <td></td>
+                    <td><input id="est" class="early" size="6" type="text" placeholder=" early start"/></td>
+                    <td><input id="eft" class="early"  size="6" type="text" placeholder=" early finish"/></td>
+                    <td></td>
+                </tr>
+                <tr>
+                    <td><input id="ff" class="final"  size="6" type="text" placeholder=" free float" disabled/></td>
+                    <td class="bordered" colspan="2" style="text-align: center;"><span id="lbl" style="font-weight: bold; color: black;"></span></td>
+                    <td><input id="tf" class="final"  size="6" type="text" placeholder=" total float" disabled/></td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td><input id="lst" class="late"  size="6" type="text" placeholder=" late start" disabled/></td>
+                    <td><input id="lft" class="late"  size="6" type="text" placeholder=" late finish" disabled/></td>
+                    <td></td>
+                </tr>
+            </table>
+            <p id="feedback" style="color: red;">&nbsp;</p>
+        </div>
+        <div id="warning" title="Sorry" style="display: none;">
+            <p>Currently not available</p>
+        </div>
+        <div class="text-center h1" style="padding-top: 20px; padding-bottom: 20px;"><strong>Critical Path</strong></div>
+        <div class="container">
+            <div class="row">
+                <div class="col-12 col-sm-12 col-md-12 col-lg-12 col-xl-12">
+                    <div class="accordion">
+                        <h2>Question</h2>
+                        <div id="q1">
+                            <div class="h4">
+                                <p>
+                                    <strong>
+                                        Press "START" button and follow the instructions to finish the question. The number after each activity is its duration.
+                                    </strong>
+                                </p>
+                                <button onclick="toStart(event);" class="btn btn-primary">&nbsp;&nbsp;START&nbsp;&nbsp;</button>
+                            </div>
+                            <div id="answer"></div>
+                            <div id="svg-container">
+                                <svg id="svg-main" xmlns="http://www.w3.org/2000/svg" 
+                                     xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 50 800 600">
+                                </svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <canvas id="mycanvas" style="display: none; position: fixed; left: 0; top: 0;"></canvas>
+    </body>
+</html>
